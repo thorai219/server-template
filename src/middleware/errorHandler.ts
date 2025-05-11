@@ -1,4 +1,4 @@
-import { NextFunction, Request, Response } from "express";
+import { Request, Response } from "express";
 
 import { logger } from "services/logger";
 
@@ -9,16 +9,10 @@ export class AppError extends Error {
     public errors: string[] = [],
   ) {
     super(message);
-    this.name = "AppError";
   }
 }
 
-export function errorHandler(
-  err: Error,
-  _req: Request,
-  res: Response,
-  _next: NextFunction,
-): void {
+export function errorHandler(err: Error, _req: Request, res: Response): void {
   const isAppError = err instanceof AppError;
   const status = isAppError ? err.statusCode : 500;
   const response = {
