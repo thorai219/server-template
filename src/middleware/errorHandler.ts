@@ -1,29 +1,56 @@
 import { Request, Response } from "express";
+import { AppError } from "utils/app.error";
 
-import { logger } from "services/logger";
-
-export class AppError extends Error {
-  constructor(
-    public message: string,
-    public statusCode: number = 400,
-    public errors: string[] = [],
-  ) {
-    super(message);
-  }
+interface ErrorResponse {
+  status: string;
+  message: string;
+  code?: string;
+  data?: unknown;
+  stack?: string;
 }
 
-export function errorHandler(err: Error, _req: Request, res: Response): void {
-  const isAppError = err instanceof AppError;
-  const status = isAppError ? err.statusCode : 500;
-  const response = {
-    success: false,
-    message: isAppError ? err.message : "Internal server error",
-    errors: isAppError && err.errors.length ? err.errors : [],
-    statusCode: status,
-    ...(process.env.NODE_ENV !== "production" &&
-      !isAppError && { stack: err.stack }),
+export const errorHandler = (err: Error, req: Request, res: Response): void => {
+  const isDevelopment = process.env.NODE_ENV === "development";
+
+  const errorResponse: ErrorResponse = {
+    status: "error",
+    message: "Internal Server Error",
   };
 
-  logger.error(err.stack || err.message);
-  res.status(status).json(response);
-}
+  let statusCode = 500;
+
+  if (err instanceof AppError) {
+    statusCode = err.statusCode;
+    errorResponse.status = statusCode < 500 ? "fail" : "error";
+    errorResponse.message = err.message;
+
+    if (err.code) {
+      errorResponse.code = err.code;
+    }
+
+    if (err.data) {
+      errorResponse.data = err.data;
+    }
+  } else if (err.name === "TokenExpiredError") {
+    statusCode = 401;
+    errorResponse.status = "fail";
+    errorResponse.code = "TOKEN_EXPIRED";
+  } else if (err.name === "JsonWebTokenError") {
+    statusCode = 401;
+    errorResponse.status = "fail";
+    errorResponse.code = "INVALID_TOKEN";
+  }
+
+  if (isDevelopment && err.stack) {
+    errorResponse.stack = err.stack;
+  }
+
+  console.error({
+    path: req.path,
+    method: req.method,
+    error: err.message,
+    stack: err.stack,
+  });
+
+  res.status(statusCode).json(errorResponse);
+};
